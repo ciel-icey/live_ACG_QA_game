@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ACG问答</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+    .message-enter { animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .btn-hover { transition: all 0.2s ease; }
+    .btn-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .btn-hover:active { transform: translateY(0); }
+    .file-upload { position: relative; overflow: hidden; display: inline-block; }
+    .file-upload input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+    .buzz-btn { transition: all 0.15s ease; }
+    .buzz-btn:hover:not(:disabled) { transform: scale(1.03); box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4); }
+    .buzz-btn:active:not(:disabled) { transform: scale(0.97); }
+    .buzz-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); } }
+    .buzz-ready { animation: pulse-border 1.5s infinite; }
+    .choice-option { transition: all 0.15s ease; }
+    .choice-option:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+    .choice-option:active { transform: scale(0.98); }
+    .question-image { cursor: pointer; transition: transform 0.2s; }
+    .question-image:hover { transform: scale(1.02); }
+    #imageOverlay { transition: opacity 0.2s; }
+    @media (max-width: 768px) {
+      #gameScreen { min-height: 100dvh; }
+      #gameScreen > .container { min-height: 100dvh; max-width: none; padding: 8px 8px 12px; display: flex; flex-direction: column; }
+      #gameHeader { flex: 0 0 auto; padding: 10px; margin-bottom: 8px; border-radius: 14px; }
+      #gameHeader .game-meta { font-size: 12px; line-height: 1.4; }
+      #gameHeader .game-timer { font-size: 18px; }
+      #forceEndBtn, #forceEndTurnBtn { padding: 6px 10px; font-size: 12px; }
+      #wordDisplay { min-height: 22px; margin-top: 6px !important; font-size: 16px !important; line-height: 1.35; }
+      #gameLayout { flex: 0 0 auto; min-height: 0; display: flex !important; flex-direction: column; gap: 8px; }
+      #playersColumn { order: 1 !important; width: 100% !important; flex: 0 0 auto; }
+      #playersPanel { padding: 8px !important; margin-bottom: 0 !important; }
+      #playersPanel h3 { margin-bottom: 6px !important; font-size: 13px; }
+      #playerScores { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+      #playerScores > div { flex: 0 0 auto; min-width: 96px; padding: 6px 8px !important; font-size: 12px; }
+      #questionColumn { order: 2 !important; width: 100% !important; flex: 0 0 auto; }
+      #questionPanel { width: 100%; flex: 0 0 auto; padding: 12px !important; }
+      #chatColumn { order: 3 !important; width: 100% !important; flex: 0 0 auto; min-height: 0; }
+      #chatPanel { max-height: 140px !important; padding: 8px !important; display: flex; flex-direction: column; }
+      #chatPanel h3 { display: none; }
+      #chat { flex: 1 1 auto; max-height: 60px !important; min-height: 0; margin-bottom: 6px !important; font-size: 12px; }
+      #chat > div { padding: 4px !important; }
+      #chatInput { flex: 0 0 auto; padding: 8px 12px !important; font-size: 14px; }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
+
+<div id="nicknameScreen" class="flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+    <h1 class="text-3xl font-bold text-center mb-8">ACG问答</h1>
+    <input type="text" id="nicknameInput" placeholder="请输入昵称..." class="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4">
+    <button id="confirmNicknameBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium py-3 rounded-lg btn-hover">进入游戏大厅</button>
+  </div>
+</div>
+
+<div id="lobbyScreen" class="hidden min-h-screen p-6">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">游戏大厅</h1>
+      <div><span class="text-gray-600" id="lobbyNickname"></span><button id="logoutBtn" class="ml-4 px-4 py-2 bg-gray-200 rounded-lg btn-hover">退出</button></div>
+    </div>
+    <div class="flex gap-4 mb-8">
+      <input type="text" id="roomNameInput" placeholder="输入房间名称（可选）" class="flex-1 px-4 py-3 border rounded-lg">
+      <button id="createRoomBtn" class="px-6 py-3 bg-blue-500 text-white rounded-lg btn-hover">创建房间</button>
+    </div>
+    <div class="bg-white rounded-xl shadow-lg p-6">
+      <h2 class="text-xl font-bold mb-4">房间列表 <button id="refreshRoomsBtn" class="text-sm text-blue-500 ml-2">刷新</button></h2>
+      <div id="roomListContainer" class="space-y-2 max-h-96 overflow-y-auto"><p class="text-gray-400 text-center py-8">暂无房间，创建一个吧</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="waitingScreen" class="hidden flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+    <h1 class="text-2xl font-bold text-center mb-2" id="roomTitle">房间: -</h1>
+    <p class="text-center text-gray-500 mb-6">房间ID: <span id="roomIdDisplay" class="font-mono"></span></p>
+    <div id="waitingSection">
+      <div class="text-center mb-6">
+        <p id="waitingStatus" class="text-gray-600 mb-2">等待其他玩家加入...</p>
+        <p class="text-sm text-gray-500">玩家: <span id="playerCount">0</span>/20 | 观众: <span id="spectatorCount">0</span>/30</p>
+      </div>
+      <div id="playerListWaiting" class="mb-6 max-h-40 overflow-y-auto space-y-2"></div>
+      <div id="hostSettings" class="hidden mb-6 p-4 bg-gray-50 rounded-lg">
+        <h3 class="font-medium mb-3">游戏设置</h3>
+        <div class="mb-3"><label class="text-sm">抢答时间(秒)</label><input type="number" id="answerTimeInput" min="10" max="120" value="30" class="w-full px-3 py-2 border rounded"></div>
+        <div class="mb-3"><label class="text-sm">回答时间(秒)</label><input type="number" id="buzzAnswerTimeInput" min="5" max="30" value="10" class="w-full px-3 py-2 border rounded"></div>
+        <div class="mb-3"><label class="text-sm">题目数量</label><input type="number" id="roundsInput" min="1" max="50" value="5" class="w-full px-3 py-2 border rounded"></div>
+        <div class="mb-3"><label class="text-sm">内置词库</label>
+          <div class="flex gap-2"><select id="wordBankSelect" class="min-w-0 flex-1 px-3 py-2 border rounded"><option value="">加载中...</option></select><button type="button" id="refreshWordBanksBtn" class="px-3 py-2 bg-gray-100 text-gray-700 rounded border">刷新</button></div>
+        </div>
+        <div class="mb-3"><label class="text-sm">导入词库(Excel)</label>
+          <div class="file-upload w-full"><button class="w-full bg-blue-100 text-blue-700 py-2 rounded">选择Excel文件</button><input type="file" id="wordFileInput" accept=".xlsx,.xls"></div>
+          <p id="wordCountText" class="text-xs text-gray-500 mt-1">系统默认词库</p>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">Excel格式：类型(选择/简答) | 题目 | 图片 | 答案 | 选项1 | 选项2...</p>
+      </div>
+      <div class="flex gap-3 mb-3 flex-wrap">
+        <button id="toggleRoleBtn" class="flex-1 bg-indigo-100 text-indigo-700 py-3 rounded-lg btn-hover">切换为观众</button>
+        <button id="toggleRefereeBtn" class="hidden flex-1 bg-orange-100 text-orange-700 py-3 rounded-lg btn-hover">成为裁判</button>
+        <button id="startGameBtn" class="hidden flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-lg btn-hover">开始游戏</button>
+      </div>
+      <button id="leaveRoomBtn" class="w-full bg-red-100 text-red-700 py-3 rounded-lg btn-hover">离开房间</button>
+    </div>
+  </div>
+</div>
+
+<div id="imageOverlay" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 cursor-pointer">
+  <img id="imageOverlayImg" class="max-w-full max-h-full object-contain rounded-lg" src="">
+</div>
+
+<div id="gameScreen" class="hidden">
+  <div class="container mx-auto p-4">
+    <div id="gameHeader" class="bg-white rounded-xl shadow-lg p-4 mb-4">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div class="game-meta">
+          <span class="text-gray-600">第 <span id="currentRound" class="font-bold text-blue-600">1</span> / <span id="totalRounds">5</span> 题</span>
+          <span id="questionTypeBadge" class="ml-3 text-xs px-2 py-1 rounded"></span>
+        </div>
+        <div class="flex items-center gap-4">
+          <button id="leaveGameBtn" class="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg btn-hover text-sm font-bold">退出房间</button>
+          <button id="forceEndTurnBtn" class="hidden px-4 py-2 bg-orange-100 text-orange-600 border border-orange-300 rounded-lg btn-hover text-sm font-bold">提前结束当前题</button>
+          <button id="forceEndBtn" class="hidden px-4 py-2 bg-red-100 text-red-600 border border-red-300 rounded-lg btn-hover text-sm font-bold">强制结束游戏</button>
+          <div class="game-timer text-2xl font-bold">倒计时: <span id="timer" class="text-red-500">30</span>秒</div>
+        </div>
+      </div>
+      <div id="wordDisplay" class="mt-3 text-xl font-medium text-center"></div>
+    </div>
+    <div id="gameLayout" class="flex flex-col lg:flex-row gap-4">
+      <div id="playersColumn" class="lg:w-1/5 order-2 lg:order-1">
+        <div id="playersPanel" class="bg-white rounded-xl shadow-lg p-4 mb-4">
+          <h3 class="font-bold text-gray-700 mb-3">玩家列表</h3>
+          <div id="playerScores" class="space-y-2"></div>
+        </div>
+      </div>
+      <div id="questionColumn" class="lg:w-3/5 order-1 lg:order-2">
+        <div id="questionPanel" class="bg-white rounded-xl shadow-lg p-8">
+          <div id="questionArea" class="text-center mb-6">
+            <p id="questionLabel" class="text-gray-500 text-sm mb-2">问题</p>
+            <p id="questionText" class="text-2xl font-bold text-gray-800 mb-3">-</p>
+            <p id="questionHint" class="text-gray-500 mb-3"></p>
+            <div id="questionImageArea" class="hidden mb-4">
+              <img id="questionImage" class="question-image max-w-full max-h-48 mx-auto rounded-lg border" src="" alt="题目图片">
+            </div>
+          </div>
+          <div id="buzzArea" class="text-center">
+            <button id="buzzBtn" class="buzz-btn w-full max-w-xs py-6 px-8 bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold text-2xl rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed" disabled>抢答！</button>
+            <div id="choiceOptions" class="hidden mt-4 space-y-3 max-w-md mx-auto"></div>
+            <div id="answerInline" class="hidden mt-4">
+              <div class="flex gap-2 max-w-md mx-auto">
+                <input type="text" id="answerInlineInput" placeholder="输入你的答案..." class="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-lg focus:outline-none focus:border-green-500">
+                <button id="helpBtn" class="px-3 py-3 bg-purple-100 text-purple-700 rounded-lg btn-hover text-sm whitespace-nowrap">场外求助<br><span id="helpRemaining">1次</span></button>
+              </div>
+              <div class="flex gap-2 mt-2 max-w-md mx-auto">
+                <button id="answerInlineSubmit" class="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium py-2 rounded-lg btn-hover">提交答案</button>
+                <button id="answerInlineCancel" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg btn-hover">放弃</button>
+              </div>
+              <div id="helpHint" class="hidden mt-2 p-2 bg-purple-50 rounded-lg text-sm text-purple-700">观众提示: <span id="helpHintText"></span></div>
+            </div>
+            <div id="judgeArea" class="hidden mt-4 p-4 bg-orange-50 rounded-xl max-w-md mx-auto">
+              <p id="judgePrompt" class="text-sm text-orange-700 font-medium mb-2"></p>
+              <p id="judgeSubmittedAnswer" class="text-lg font-bold text-gray-800 mb-1"></p>
+              <p id="judgeReference" class="text-sm text-gray-500 mb-3"></p>
+              <p class="text-sm text-gray-500 mb-3">倒计时: <span id="judgeTimer" class="font-bold text-red-500">15</span>秒</p>
+              <div class="flex gap-3">
+                <button id="judgeCorrectBtn" class="flex-1 bg-green-500 text-white py-3 rounded-lg btn-hover font-medium">正确</button>
+                <button id="judgeWrongBtn" class="flex-1 bg-red-500 text-white py-3 rounded-lg btn-hover font-medium">错误</button>
+              </div>
+            </div>
+            <div id="helpResponseArea" class="hidden mt-4">
+              <p id="helpResponsePrompt" class="text-sm text-purple-600 font-medium mb-2"></p>
+              <div class="flex gap-2 max-w-md mx-auto">
+                <input type="text" id="helpResponseInput" placeholder="输入你提示的答案..." class="flex-1 px-4 py-3 border border-purple-300 rounded-lg text-lg">
+                <button id="helpResponseSubmit" class="px-4 py-3 bg-purple-500 text-white rounded-lg btn-hover whitespace-nowrap">发送</button>
+              </div>
+            </div>
+            <p id="buzzStatus" class="mt-3 text-sm text-gray-500"></p>
+          </div>
+          <div id="resultArea" class="hidden text-center mt-6"><p id="resultText" class="text-lg font-medium"></p></div>
+        </div>
+      </div>
+      <div id="chatColumn" class="lg:w-1/5 order-3">
+        <div id="chatPanel" class="bg-white rounded-xl shadow-lg p-4 h-full flex flex-col">
+          <h3 class="font-bold text-gray-700 mb-3">聊天</h3>
+          <div id="chat" class="flex-1 overflow-y-auto mb-4 space-y-2 max-h-96"></div>
+          <input type="text" id="chatInput" placeholder="输入消息..." class="w-full px-4 py-3 border rounded-lg">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="endScreen" class="hidden flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center">
+    <h1 class="text-3xl font-bold mb-6">游戏结束！</h1>
+    <div id="rankingsContainer" class="mb-6"></div>
+    <div class="flex flex-col gap-3">
+      <button id="playAgainBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-lg btn-hover">返回房间</button>
+      <button id="switchToSpectatorBtn" class="w-full bg-gray-200 text-gray-700 py-3 rounded-lg btn-hover">切换为观众</button>
+      <button id="leaveEndBtn" class="w-full bg-red-100 text-red-700 py-3 rounded-lg btn-hover">离开房间</button>
+    </div>
+  </div>
+</div>
+
+<div id="renameModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+    <h2 class="text-xl font-bold mb-4">昵称已存在</h2><p id="renameMessage" class="text-gray-600 mb-6"></p>
+    <input type="text" id="renameInput" placeholder="输入新昵称" class="w-full px-4 py-3 border rounded-lg mb-4">
+    <div class="flex gap-4"><button id="cancelRenameBtn" class="flex-1 bg-gray-200 py-3 rounded-lg btn-hover">取消</button><button id="confirmRenameBtn" class="flex-1 bg-blue-500 text-white py-3 rounded-lg btn-hover">确认修改</button></div>
+  </div>
+</div>
+
+<div id="appDialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+    <div class="flex items-start gap-3 mb-4">
+      <div id="appDialogIcon" class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">!</div>
+      <div class="min-w-0"><h2 id="appDialogTitle" class="text-xl font-bold leading-tight">提示</h2><p id="appDialogMessage" class="text-gray-600 mt-2 whitespace-pre-line break-words"></p></div>
+    </div>
+    <textarea id="appDialogInput" class="hidden w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 min-h-24 resize-y" placeholder="输入文本..."></textarea>
+    <div class="flex gap-3 justify-end"><button id="appDialogCancel" type="button" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg btn-hover">取消</button><button id="appDialogConfirm" type="button" class="px-4 py-2 bg-blue-500 text-white rounded-lg btn-hover">确定</button></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  function debounce(func, wait) { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); }; }
+  const MAX_PLAYERS = 20, MAX_SPECTATORS = 30;
+  const RECONNECT_STORAGE_KEY = 'acgQuizSession';
+  function loadReconnectSession() { try { return JSON.parse(localStorage.getItem(RECONNECT_STORAGE_KEY) || 'null') || {}; } catch { return {}; } }
+  function saveReconnectSession(s) { if (s.roomId && s.playerId && s.reconnectToken) localStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify(s)); }
+  function clearReconnectSession() { localStorage.removeItem(RECONNECT_STORAGE_KEY); }
+  const socket = io({ reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
+
+  let myId = '', myName = '', currentRoomId = '', isHost = false, isSpectator = false, isReferee = false, isPlayer = true;
+  let isBuzzer = false, canBuzz = false, currentBuzzerId = '', currentQuestionType = '';
+  let players = [], scores = {}, gameInProgress = false;
+  let pendingJoinRoomId = '', pendingJoinAsSpectator = false;
+
+  const $ = (id) => document.getElementById(id);
+  const nicknameScreen = $('nicknameScreen'), lobbyScreen = $('lobbyScreen'), waitingScreen = $('waitingScreen'), gameScreen = $('gameScreen'), endScreen = $('endScreen'), renameModal = $('renameModal');
+  const nicknameInput = $('nicknameInput'), confirmNicknameBtn = $('confirmNicknameBtn'), lobbyNickname = $('lobbyNickname'), logoutBtn = $('logoutBtn');
+  const roomNameInput = $('roomNameInput'), createRoomBtn = $('createRoomBtn'), refreshRoomsBtn = $('refreshRoomsBtn'), roomListContainer = $('roomListContainer');
+  const roomTitle = $('roomTitle'), roomIdDisplay = $('roomIdDisplay'), waitingStatus = $('waitingStatus');
+  const playerCount = $('playerCount'), spectatorCount = $('spectatorCount'), playerListWaiting = $('playerListWaiting');
+  const hostSettings = $('hostSettings'), answerTimeInput = $('answerTimeInput'), buzzAnswerTimeInput = $('buzzAnswerTimeInput'), roundsInput = $('roundsInput');
+  const wordBankSelect = $('wordBankSelect'), refreshWordBanksBtn = $('refreshWordBanksBtn'), wordFileInput = $('wordFileInput'), wordCountText = $('wordCountText');
+  const startGameBtn = $('startGameBtn'), toggleRoleBtn = $('toggleRoleBtn'), leaveRoomBtn = $('leaveRoomBtn'), toggleRefereeBtn = $('toggleRefereeBtn');
+  const currentRound = $('currentRound'), totalRounds = $('totalRounds'), questionTypeBadge = $('questionTypeBadge');
+  const timer = $('timer'), wordDisplay = $('wordDisplay'), playerScores = $('playerScores'), chat = $('chat'), chatInput = $('chatInput');
+  const forceEndBtn = $('forceEndBtn'), forceEndTurnBtn = $('forceEndTurnBtn'), leaveGameBtn = $('leaveGameBtn');
+  const rankingsContainer = $('rankingsContainer'), playAgainBtn = $('playAgainBtn'), switchToSpectatorBtn = $('switchToSpectatorBtn'), leaveEndBtn = $('leaveEndBtn');
+  const renameMessage = $('renameMessage'), renameInput = $('renameInput'), confirmRenameBtn = $('confirmRenameBtn'), cancelRenameBtn = $('cancelRenameBtn');
+  const appDialog = $('appDialog'), appDialogIcon = $('appDialogIcon'), appDialogTitle = $('appDialogTitle'), appDialogMessage = $('appDialogMessage');
+  const appDialogInput = $('appDialogInput'), appDialogCancel = $('appDialogCancel'), appDialogConfirm = $('appDialogConfirm');
+  let activeDialogResolver = null;
+
+  const questionText = $('questionText'), questionHint = $('questionHint'), questionImageArea = $('questionImageArea'), questionImage = $('questionImage');
+  const imageOverlay = $('imageOverlay'), imageOverlayImg = $('imageOverlayImg');
+  const buzzBtn = $('buzzBtn'), buzzStatus = $('buzzStatus'), resultArea = $('resultArea'), resultText = $('resultText');
+  const choiceOptions = $('choiceOptions'), answerInline = $('answerInline'), answerInlineInput = $('answerInlineInput');
+  const answerInlineSubmit = $('answerInlineSubmit'), answerInlineCancel = $('answerInlineCancel');
+  const helpBtn = $('helpBtn'), helpRemaining = $('helpRemaining'), helpHint = $('helpHint'), helpHintText = $('helpHintText');
+  const helpResponseArea = $('helpResponseArea'), helpResponsePrompt = $('helpResponsePrompt'), helpResponseInput = $('helpResponseInput'), helpResponseSubmit = $('helpResponseSubmit');
+  const judgeArea = $('judgeArea'), judgePrompt = $('judgePrompt'), judgeSubmittedAnswer = $('judgeSubmittedAnswer');
+  const judgeReference = $('judgeReference'), judgeTimer = $('judgeTimer'), judgeCorrectBtn = $('judgeCorrectBtn'), judgeWrongBtn = $('judgeWrongBtn');
+
+  function closeAppDialog(confirmed) { if (!activeDialogResolver) return; const r = activeDialogResolver; activeDialogResolver = null; appDialog.classList.add('hidden'); r({ confirmed, value: appDialogInput.value }); }
+  function showAppDialog(options = {}) {
+    if (activeDialogResolver) closeAppDialog(false);
+    const danger = !!options.danger;
+    appDialogTitle.textContent = options.title || '提示'; appDialogMessage.textContent = options.message || '';
+    appDialogIcon.textContent = danger ? '!' : (options.icon || '!');
+    appDialogIcon.className = `w-10 h-10 rounded-xl ${danger ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'} flex items-center justify-center font-bold flex-shrink-0`;
+    appDialogConfirm.textContent = options.confirmText || '确定';
+    appDialogConfirm.className = `px-4 py-2 ${danger ? 'bg-red-500' : 'bg-blue-500'} text-white rounded-lg btn-hover`;
+    appDialogCancel.textContent = options.cancelText || '取消'; appDialogCancel.classList.toggle('hidden', !options.showCancel);
+    appDialogInput.classList.toggle('hidden', !options.input); appDialogInput.value = options.defaultValue || '';
+    appDialog.classList.remove('hidden');
+    if (options.input) setTimeout(() => appDialogInput.focus(), 0); else setTimeout(() => appDialogConfirm.focus(), 0);
+    return new Promise(resolve => { activeDialogResolver = resolve; });
+  }
+  appDialogCancel.addEventListener('click', () => closeAppDialog(false));
+  appDialogConfirm.addEventListener('click', () => closeAppDialog(true));
+  appDialog.addEventListener('click', e => { if (e.target === appDialog) closeAppDialog(false); });
+  appDialogInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) closeAppDialog(true); });
+  function showNotice(title, message, opts = {}) { return showAppDialog({ title, message, confirmText: opts.confirmText || '知道了', danger: opts.danger }); }
+  async function showConfirm(title, message, opts = {}) { const r = await showAppDialog({ title, message, showCancel: true, confirmText: opts.confirmText || '确定', cancelText: '取消', danger: opts.danger }); return r.confirmed; }
+  async function showPrompt(title, message, def = '') { const r = await showAppDialog({ title, message, input: true, showCancel: true, confirmText: '发送', cancelText: '取消', defaultValue: def }); return r.confirmed ? r.value : null; }
+
+  function hideAll() { [nicknameScreen, lobbyScreen, waitingScreen, gameScreen, endScreen].forEach(e => e.classList.add('hidden')); }
+  function showLobby() { hideAll(); lobbyScreen.classList.remove('hidden'); lobbyNickname.textContent = myName; socket.emit('getRoomList'); }
+  function showWaiting(roomId, roomName) { hideAll(); waitingScreen.classList.remove('hidden'); currentRoomId = roomId; roomTitle.textContent = roomName || '房间: ' + roomId; roomIdDisplay.textContent = roomId; waitingStatus.textContent = '等待房主开始新游戏...'; updateRefereeButton(); }
+  function showGame() { hideAll(); gameScreen.classList.remove('hidden'); }
+  function showEndScreen() { hideAll(); endScreen.classList.remove('hidden'); }
+
+  imageOverlay.addEventListener('click', () => imageOverlay.classList.add('hidden'));
+  questionImage.addEventListener('click', () => { if (questionImage.src) { imageOverlayImg.src = questionImage.src; imageOverlay.classList.remove('hidden'); } });
+
+  function updateForceEndBtn() { if (isHost && gameInProgress) forceEndBtn.classList.remove('hidden'); else forceEndBtn.classList.add('hidden'); }
+  function canModerateCurrentRoom() { return !!currentRoomId && isReferee; }
+  function updateForceEndTurnBtn() { forceEndTurnBtn.classList.toggle('hidden', !(canModerateCurrentRoom() && gameInProgress)); }
+  function updateActionButtons() { updateForceEndBtn(); updateForceEndTurnBtn(); }
+
+  function updateBuzzButton() {
+    if (!gameInProgress) { buzzBtn.disabled = true; buzzBtn.classList.remove('buzz-ready'); buzzStatus.textContent = ''; return; }
+    if (currentBuzzerId) { buzzBtn.disabled = true; buzzBtn.classList.remove('buzz-ready'); const bz = players.find(p => p.id === currentBuzzerId); buzzStatus.textContent = bz ? `${bz.name} 正在回答...` : '有人正在回答...'; }
+    else if (canBuzz && isPlayer && !isSpectator && !isReferee) { buzzBtn.disabled = false; buzzBtn.classList.add('buzz-ready'); buzzStatus.textContent = '点击按钮抢答！'; }
+    else { buzzBtn.disabled = true; buzzBtn.classList.remove('buzz-ready'); buzzStatus.textContent = isSpectator ? '观众无法抢答' : (isReferee ? '裁判无法抢答' : '等待抢答...'); }
+  }
+
+  async function requestModeration(action, targetId) {
+    const target = players.find(p => p.id === targetId); if (!target || target.id === myId || !canModerateCurrentRoom()) return;
+    const reason = await showPrompt(action === 'warn' ? `警告 ${target.name}` : `踢出 ${target.name}`, '输入文本，留空用默认：', '');
+    if (reason === null) return;
+    if (action === 'kick') { if (!(await showConfirm('确认踢出', `将 ${target.name} 踢出房间？`, { danger: true, confirmText: '踢出' }))) return; }
+    socket.emit('moderatePlayer', { action, targetId, reason: reason.trim() || (action === 'warn' ? '请遵守房间规则。' : '你已被移出房间。') });
+  }
+
+  function emitWithAck(eventName, ...args) { return new Promise(resolve => { socket.timeout(5000).emit(eventName, ...args, (err, result) => { if (err) { resolve({ ok: false, error: 'request_timeout' }); return; } resolve(result || { ok: false, error: 'empty_response' }); }); }); }
+
+  function setWordBankSelectValue(value) { if (!value) return; if ([...wordBankSelect.options].some(o => o.value === value)) wordBankSelect.value = value; }
+
+  function applyWordSource(data = {}) {
+    const count = data.questionCount ?? data.count ?? 0;
+    const sourceName = data.wordSourceName || data.sourceName || ''; const sourceType = data.wordSourceType || data.sourceType || '';
+    const sourceId = data.wordBankId || data.sourceId || '';
+    if (sourceType === 'upload') wordCountText.textContent = `上传词库：${count}题`;
+    else if (sourceName) wordCountText.textContent = `内置词库：${sourceName} (${count}题)`;
+    else wordCountText.textContent = count ? `当前词库：${count}题` : '系统默认词库';
+    setWordBankSelectValue(sourceId);
+  }
+
+  async function loadWordBanks(selectedId = '') {
+    const result = await emitWithAck('getWordBanks'); if (!result.ok) { wordBankSelect.innerHTML = '<option value="">读取失败</option>'; return result; }
+    const banks = result.wordBanks || []; if (!banks.length) { wordBankSelect.innerHTML = '<option value="">暂无内置词库</option>'; return result; }
+    wordBankSelect.innerHTML = banks.map(b => `<option value="${b.id}">${b.name}（${b.count}题）</option>`).join('');
+    setWordBankSelectValue(selectedId); return result;
+  }
+
+  function updateRefereeButton() {
+    if (!isHost || gameInProgress) { toggleRefereeBtn.classList.add('hidden'); } else { toggleRefereeBtn.textContent = isReferee ? '取消裁判' : '成为裁判'; toggleRefereeBtn.classList.remove('hidden'); }
+    if (isReferee) { toggleRoleBtn.textContent = '切换为玩家'; toggleRoleBtn.classList.remove('hidden'); }
+    else if (isSpectator) { toggleRoleBtn.textContent = '切换为玩家'; toggleRoleBtn.classList.remove('hidden'); }
+    else { toggleRoleBtn.textContent = '切换为观众'; toggleRoleBtn.classList.remove('hidden'); }
+  }
+
+  function addChatMessage(data) {
+    const div = document.createElement('div'); let bg = 'bg-gray-50';
+    if (data.isSystem) bg = 'bg-green-50 text-green-700'; else if (data.spectatorChat) bg = 'bg-purple-50 text-purple-700'; else if (data.isReferee) bg = 'bg-orange-50 text-orange-700';
+    div.className = `message-enter p-2 rounded-lg ${bg}`; div.innerHTML = `<span class="font-medium">${data.name}:</span> ${data.message}`;
+    chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+  }
+
+  function updateMyStateFromPlayers(pa) { const me = pa.find(p => p.id === myId); if (me) { isSpectator = me.isSpectator || false; isReferee = me.isReferee || false; isPlayer = !isSpectator && !isReferee; } }
+
+  function updatePlayerListWaiting(data) {
+    updateMyStateFromPlayers(data.players);
+    const active = data.players.filter(p => !p.isSpectator && !p.isReferee), spectators = data.players.filter(p => p.isSpectator);
+    playerCount.textContent = active.length; spectatorCount.textContent = spectators.length; isHost = (data.hostId === myId);
+    updateRefereeButton();
+    if (isHost) { hostSettings.classList.remove('hidden'); startGameBtn.classList.toggle('hidden', active.length < 1); loadWordBanks(data.wordBankId); applyWordSource(data); }
+    else { hostSettings.classList.add('hidden'); startGameBtn.classList.add('hidden'); }
+    playerListWaiting.innerHTML = '';
+    data.players.forEach(p => {
+      const div = document.createElement('div'); div.className = 'p-2 bg-gray-50 rounded-lg flex items-center gap-2 flex-wrap';
+      const badges = [];
+      if (p.id === data.hostId) badges.push('<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-bold">房主</span>');
+      if (p.isReferee) badges.push('<span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">裁判</span>');
+      else if (p.isSpectator) badges.push('<span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">观众</span>');
+      const actions = canModerateCurrentRoom() && p.id !== myId ? `<span class="flex gap-1 ml-auto"><button type="button" class="moderation-btn text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded" data-action="warn" data-target="${p.id}">警告</button><button type="button" class="moderation-btn text-xs bg-red-100 text-red-700 px-2 py-1 rounded" data-action="kick" data-target="${p.id}">踢出</button></span>` : '';
+      div.innerHTML = `<span class="w-2 h-2 bg-green-500 rounded-full"></span><span>${p.name}</span>${badges.join('')}<span class="flex-1"></span>${actions}`;
+      playerListWaiting.appendChild(div);
+    });
+  }
+
+  function updateScoreList(sc, plist) {
+    playerScores.innerHTML = '';
+    plist.filter(p => !p.isSpectator && !p.isReferee).sort((a,b) => (sc[b.id]||0)-(sc[a.id]||0)).forEach(p => {
+      const div = document.createElement('div'); div.className = 'p-2 bg-gray-50 rounded-lg flex justify-between items-center gap-2 flex-wrap';
+      let badge = currentBuzzerId === p.id ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded ml-2">回答中</span>' : '';
+      const actions = canModerateCurrentRoom() && p.id !== myId ? `<span class="flex gap-1"><button type="button" class="moderation-btn text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded" data-action="warn" data-target="${p.id}">警告</button><button type="button" class="moderation-btn text-xs bg-red-100 text-red-700 px-2 py-1 rounded" data-action="kick" data-target="${p.id}">踢出</button></span>` : '';
+      div.innerHTML = `<span>${p.name}${badge}</span><span class="font-bold text-blue-600">${sc[p.id]||0}</span>${actions}`;
+      playerScores.appendChild(div);
+    });
+    plist.filter(p => p.isSpectator).forEach(p => {
+      const div = document.createElement('div'); div.className = 'p-2 bg-gray-100 rounded-lg flex justify-between items-center gap-2 flex-wrap text-sm text-gray-600';
+      div.innerHTML = `<span>${p.name}</span><span class="text-xs bg-gray-200 px-1 rounded">观众</span>`;
+      playerScores.appendChild(div);
+    });
+    plist.filter(p => p.isReferee).forEach(p => {
+      const div = document.createElement('div'); div.className = 'p-2 bg-orange-50 rounded-lg flex justify-between items-center gap-2 flex-wrap text-sm text-orange-700';
+      div.innerHTML = `<span>${p.name}</span><span class="text-xs bg-orange-200 px-1 rounded">裁判</span>`;
+      playerScores.appendChild(div);
+    });
+  }
+
+  function joinRoom(roomId, asSpectator = false) { pendingJoinRoomId = roomId; pendingJoinAsSpectator = asSpectator; showWaiting(roomId, '加入中...'); socket.emit('joinRoom', roomId, myName, asSpectator); }
+
+  function resetLocalRoomState() {
+    clearReconnectSession(); currentRoomId = ''; isHost = false; isSpectator = false; isReferee = false; isPlayer = true;
+    isBuzzer = false; canBuzz = false; currentBuzzerId = ''; currentQuestionType = ''; gameInProgress = false; players = []; scores = {};
+    answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden'); choiceOptions.classList.add('hidden'); judgeArea.classList.add('hidden');
+    helpResponseArea.classList.add('hidden'); resultArea.classList.add('hidden'); questionImageArea.classList.add('hidden');
+  }
+
+  function leaveCurrentRoom() { if (currentRoomId) socket.emit('leaveRoom'); resetLocalRoomState(); showLobby(); }
+
+  function renderRoomList(rooms) {
+    roomListContainer.innerHTML = '';
+    if (!rooms.length) { roomListContainer.innerHTML = '<p class="text-gray-400 text-center py-8">暂无房间，创建一个吧</p>'; return; }
+    rooms.forEach(r => {
+      const div = document.createElement('div'); div.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg';
+      div.innerHTML = `<div><span class="font-medium">${r.name}</span><span class="text-xs text-gray-500 ml-2">(${r.id})</span><span class="ml-4 text-sm">${r.playerCount}/${MAX_PLAYERS}</span><span class="ml-2 text-sm">${r.spectatorCount}</span>${r.refereeCount ? `<span class="ml-2 text-sm">${r.refereeCount}</span>` : ''}<span class="ml-2 text-xs ${r.gameState!=='waiting'?'text-red-500':'text-green-500'}">${r.gameState==='waiting'?'等待中':'游戏中'}</span></div><button class="px-4 py-1 bg-blue-500 text-white rounded btn-hover join-room-btn" data-roomid="${r.id}">加入</button>`;
+      roomListContainer.appendChild(div);
+    });
+    document.querySelectorAll('.join-room-btn').forEach(b => b.addEventListener('click', e => joinRoom(e.target.dataset.roomid)));
+  }
+
+  confirmNicknameBtn.addEventListener('click', () => { const name = nicknameInput.value.trim(); if (name) { myName = name; showLobby(); } else alert('请输入昵称'); });
+  nicknameInput.addEventListener('keypress', e => e.key==='Enter' && confirmNicknameBtn.click());
+  logoutBtn.addEventListener('click', leaveCurrentRoom);
+  socket.on('roomList', renderRoomList); socket.on('roomListUpdate', renderRoomList);
+  refreshRoomsBtn.addEventListener('click', () => socket.emit('getRoomList'));
+  createRoomBtn.addEventListener('click', () => { socket.emit('createRoom', roomNameInput.value.trim(), myName); showWaiting('...', '创建中...'); });
+  roomListContainer.addEventListener('dblclick', () => { const id = prompt('输入房间ID:'); if (id) joinRoom(id.toUpperCase()); });
+
+  socket.on('errorMessage', (msg) => {
+    if (typeof msg === 'object' && msg.type === 'nameConflict') { renameMessage.textContent = msg.message; renameModal.classList.remove('hidden'); renameInput.value = myName; renameInput.focus(); }
+    else { alert(typeof msg === 'string' ? msg : msg.message); if (!lobbyScreen.classList.contains('hidden') || !waitingScreen.classList.contains('hidden')) return; showLobby(); }
+  });
+  confirmRenameBtn.addEventListener('click', () => { const n = renameInput.value.trim(); if (n) { myName = n; renameModal.classList.add('hidden'); if (pendingJoinRoomId) { showWaiting(pendingJoinRoomId, '加入中...'); socket.emit('joinRoom', pendingJoinRoomId, myName, pendingJoinAsSpectator); } } });
+  cancelRenameBtn.addEventListener('click', () => { renameModal.classList.add('hidden'); showLobby(); });
+
+  socket.on('roomJoined', data => {
+    myId = data.player.id; isHost = data.isHost; players = data.players; updateMyStateFromPlayers(data.players);
+    roomTitle.textContent = data.roomName || '房间: ' + data.roomId; roomIdDisplay.textContent = data.roomId; currentRoomId = data.roomId;
+    if (data.reconnectToken) saveReconnectSession({ roomId: data.roomId, playerId: data.player.id, reconnectToken: data.reconnectToken });
+    if (data.settings) { answerTimeInput.value = data.settings.answerTime || 30; buzzAnswerTimeInput.value = data.settings.buzzAnswerTime || 10; roundsInput.value = data.settings.totalRounds || 5; }
+    applyWordSource(data); if (isHost) loadWordBanks(data.wordBankId);
+    waitingStatus.textContent = '等待房主开始游戏...'; updatePlayerListWaiting(data);
+  });
+  socket.on('reconnectInfo', data => saveReconnectSession(data));
+
+  socket.on('stateUpdate', data => {
+    myId = data.playerId || socket.id; currentRoomId = data.roomId; isHost = data.isHost; players = data.players || [];
+    if (data.settings) { answerTimeInput.value = data.settings.answerTime || 30; buzzAnswerTimeInput.value = data.settings.buzzAnswerTime || 10; roundsInput.value = data.settings.totalRounds || 5; }
+    applyWordSource(data); if (isHost) loadWordBanks(data.wordBankId); updateMyStateFromPlayers(players);
+  });
+
+  socket.on('playerJoined', data => { players = data.players; if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting(data); });
+  socket.on('spectatorJoined', data => { players = data.players; if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting(data); });
+  socket.on('playerLeft', data => { players = data.players || players; if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting({players, hostId: data.hostId}); if (!gameScreen.classList.contains('hidden')) updateScoreList(scores, players); });
+  socket.on('playerReconnected', data => { players = data.players; scores = data.scores; if (data.isCurrentBuzzer && currentBuzzerId === data.oldId) currentBuzzerId = data.newPlayer.id; if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting({players: data.players, hostId: data.hostId}); if (!gameScreen.classList.contains('hidden')) updateScoreList(data.scores, data.players); });
+  socket.on('playerSwitched', data => { players = data.players; updateMyStateFromPlayers(data.players); if (!endScreen.classList.contains('hidden') && !gameInProgress) showWaiting(currentRoomId, ''); if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting({players: data.players, hostId: data.hostId}); if (!gameScreen.classList.contains('hidden')) updateScoreList(scores, players); updateBuzzButton(); updateActionButtons(); });
+
+  startGameBtn.addEventListener('click', () => socket.emit('startGame'));
+  leaveRoomBtn.addEventListener('click', leaveCurrentRoom); leaveGameBtn.addEventListener('click', leaveCurrentRoom);
+
+  toggleRoleBtn.addEventListener('click', () => { if (isReferee || isSpectator) socket.emit('switchToPlayer'); else socket.emit('switchToSpectator'); });
+  toggleRefereeBtn.addEventListener('click', () => { if (isReferee) socket.emit('switchToPlayer'); else socket.emit('switchToReferee'); });
+
+  const autoSaveSettings = debounce(() => { if (isHost) socket.emit('updateSettings', { answerTime: Math.max(10, Math.min(120, +answerTimeInput.value || 30)), buzzAnswerTime: Math.max(5, Math.min(30, +buzzAnswerTimeInput.value || 10)), totalRounds: Math.max(1, Math.min(50, +roundsInput.value || 5)) }); }, 500);
+  answerTimeInput.addEventListener('input', autoSaveSettings); buzzAnswerTimeInput.addEventListener('input', autoSaveSettings); roundsInput.addEventListener('input', autoSaveSettings);
+
+  refreshWordBanksBtn.addEventListener('click', async () => { const r = await loadWordBanks(wordBankSelect.value); if (!r.ok) showNotice('读取失败', '无法读取内置词库列表', { danger: true }); });
+  wordBankSelect.addEventListener('change', async () => { if (!isHost || !wordBankSelect.value) return; wordCountText.textContent = '正在切换内置词库...'; const r = await emitWithAck('selectWordBank', wordBankSelect.value); if (r.ok) applyWordSource(r); else { wordCountText.textContent = `切换失败：${r.error || ''}`; showNotice('切换词库失败', r.error || '', { danger: true }); } });
+
+  wordFileInput.addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file || !isHost) return;
+    const applyUploaded = async (questions) => {
+      if (!questions.length) { showNotice('词库文件无效', '没有解析到有效题目。', { danger: true }); return; }
+      wordCountText.textContent = `正在上传：${questions.length}题...`;
+      const r = await emitWithAck('updateWordList', questions);
+      if (r.ok) applyWordSource(r); else { wordCountText.textContent = `上传失败：${r.error || ''}`; showNotice('导入词库失败', r.error || '', { danger: true }); }
+    };
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if (rows.length < 2) { showNotice('词库文件无效', '文件为空或只有表头', { danger: true }); return; }
+        const questions = [];
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i]; if (!Array.isArray(row) || row.length < 4) continue;
+          const typeStr = String(row[0] || '').trim(); if (typeStr !== '选择' && typeStr !== '简答') continue;
+          const qText = String(row[1] || '').trim(); if (!qText) continue;
+          const image = String(row[2] || '').trim() || null;
+          const answer = String(row[3] || '').trim(); if (!answer) continue;
+          const opts = []; for (let j = 4; j < row.length; j++) { const o = String(row[j] || '').trim(); if (o) opts.push(o); }
+          const qType = typeStr === '选择' ? 'choice' : 'answer';
+          if (qType === 'choice' && opts.length < 2) continue;
+          questions.push({ type: qType, question: qText, image, answer, options: opts });
+        }
+        applyUploaded(questions);
+      } catch (err) { console.error(err); showNotice('Excel 文件解析失败', err.message || '', { danger: true }); }
+    };
+    reader.readAsArrayBuffer(file); wordFileInput.value = '';
+  });
+
+  socket.on('wordListUpdated', data => applyWordSource(data));
+  socket.on('wordListRejected', data => { wordCountText.textContent = `词库未生效：${data?.error || ''}`; showNotice('词库未生效', data?.error || '', { danger: true }); });
+  socket.on('settingsUpdated', s => { answerTimeInput.value = s.answerTime || 30; buzzAnswerTimeInput.value = s.buzzAnswerTime || 10; roundsInput.value = s.totalRounds || 5; });
+
+  // ========== Quiz Game Events ==========
+
+  socket.on('gameStarted', data => {
+    gameInProgress = true; showGame();
+    players = data.players; isHost = (data.hostId === myId); scores = data.scores;
+    updateMyStateFromPlayers(data.players); updateScoreList(data.scores, data.players); chat.innerHTML = '';
+    addChatMessage({name:'系统', message:'游戏开始！准备抢答！', isSystem:true});
+    currentBuzzerId = ''; canBuzz = false; isBuzzer = false; currentQuestionType = '';
+    resultArea.classList.add('hidden'); choiceOptions.classList.add('hidden'); answerInline.classList.add('hidden');
+    judgeArea.classList.add('hidden'); questionImageArea.classList.add('hidden');
+    buzzBtn.disabled = true; buzzBtn.classList.remove('buzz-ready'); buzzStatus.textContent = '准备开始...';
+    helpRemaining.textContent = '1次'; helpHint.classList.add('hidden'); updateActionButtons();
+  });
+
+  socket.on('gameRestarted', data => {
+    gameInProgress = false; showWaiting(data.roomId || currentRoomId, ''); players = data.players; isHost = (data.hostId === myId);
+    if (data.settings) { answerTimeInput.value = data.settings.answerTime || 30; buzzAnswerTimeInput.value = data.settings.buzzAnswerTime || 10; roundsInput.value = data.settings.totalRounds || 5; }
+    updateMyStateFromPlayers(data.players); updatePlayerListWaiting({players: data.players, hostId: data.hostId}); chat.innerHTML = '';
+    currentBuzzerId = ''; canBuzz = false; isBuzzer = false; helpRemaining.textContent = '1次'; helpHint.classList.add('hidden');
+    updateBuzzButton(); updateActionButtons();
+  });
+
+  function renderQuestionUI(q) {
+    currentQuestionType = q.type || '';
+    questionText.textContent = q.question || '请回答';
+    if (q.type === 'answer') {
+      const lh = q.wordLength ? `${q.wordLength}个字` : '';
+      questionHint.textContent = `简答题 - ${lh}`;
+      questionTypeBadge.textContent = '简答'; questionTypeBadge.className = 'ml-3 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700';
+    } else {
+      questionHint.textContent = '选择题 - 点击选项即可';
+      questionTypeBadge.textContent = '选择'; questionTypeBadge.className = 'ml-3 text-xs px-2 py-1 rounded bg-green-100 text-green-700';
+    }
+    if (q.image) { questionImageArea.classList.remove('hidden'); questionImage.src = q.image; }
+    else { questionImageArea.classList.add('hidden'); questionImage.src = ''; }
+    choiceOptions.innerHTML = '';
+    answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden');
+    if (q.options && q.type === 'choice') {
+      choiceOptions.classList.remove('hidden');
+      const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+      q.options.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-option w-full p-4 bg-white border-2 border-blue-200 text-left rounded-xl font-medium text-lg';
+        btn.innerHTML = `<span class="text-blue-500 font-bold mr-3">${labels[i] || (i+1)}</span>${opt}`;
+        btn.addEventListener('click', () => { if (!isBuzzer) return; socket.emit('submitChoice', i); buzzBtn.classList.add('hidden'); choiceOptions.classList.add('hidden'); });
+        choiceOptions.appendChild(btn);
+      });
+    } else {
+      choiceOptions.classList.add('hidden');
+    }
+  }
+
+  socket.on('questionRound', data => {
+    if (!gameInProgress) { gameInProgress = true; showGame(); }
+    if (gameScreen.classList.contains('hidden')) showGame();
+    currentRound.textContent = data.round; totalRounds.textContent = data.totalRounds; timer.textContent = data.currentTimer;
+    canBuzz = data.question ? data.question.canBuzz : false; isBuzzer = false;
+    currentBuzzerId = (data.question && data.question.buzzerId) || '';
+    answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden');
+    judgeArea.classList.add('hidden'); helpResponseArea.classList.add('hidden'); resultArea.classList.add('hidden');
+
+    renderQuestionUI(data.question || {});
+
+    if (data.question && data.question.isReferee) {
+      wordDisplay.textContent = `(裁判视角) 答案: ${data.question.answer || ''}`;
+      wordDisplay.className = 'mt-3 text-xl font-medium text-center text-orange-600'; chatInput.placeholder = '裁判消息...';
+    } else if (data.question && data.question.isSpectator) {
+      wordDisplay.textContent = '正在观战'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-gray-500';
+      chatInput.placeholder = '发送消息（仅观众可见）...';
+    } else {
+      wordDisplay.textContent = '准备抢答'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-blue-600';
+      chatInput.placeholder = '输入消息...';
+    }
+    updateBuzzButton(); updateScoreList(scores, players); updateActionButtons();
+  });
+
+  socket.on('timerUpdate', time => { timer.textContent = time; if (!judgeArea.classList.contains('hidden')) judgeTimer.textContent = time; });
+
+  buzzBtn.addEventListener('click', () => { if (!canBuzz || currentBuzzerId || !gameInProgress) return; socket.emit('buzzIn'); });
+
+  socket.on('buzzResult', data => { currentBuzzerId = data.buzzerId; updateBuzzButton(); updateScoreList(scores, players); });
+
+  socket.on('buzzAccepted', data => {
+    isBuzzer = true; canBuzz = false; buzzBtn.classList.add('hidden');
+    const q = data.question || {};
+    if (q.type === 'choice' && q.options) {
+      choiceOptions.classList.remove('hidden');
+    } else {
+      answerInline.classList.remove('hidden'); answerInlineInput.value = ''; answerInlineInput.focus();
+      helpHint.classList.add('hidden'); updateHelpButton();
+    }
+  });
+
+  socket.on('buzzRejected', data => { buzzStatus.textContent = data.error || '抢答失败'; setTimeout(() => updateBuzzButton(), 1000); });
+
+  answerInlineSubmit.addEventListener('click', () => { const a = answerInlineInput.value.trim(); if (!a) return; socket.emit('submitAnswer', a); answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden'); isBuzzer = false; });
+  answerInlineCancel.addEventListener('click', () => { socket.emit('submitAnswer', ''); answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden'); isBuzzer = false; });
+  answerInlineInput.addEventListener('keypress', e => { if (e.key === 'Enter' && answerInlineInput.value.trim()) answerInlineSubmit.click(); });
+
+  // Help
+  helpBtn.addEventListener('click', () => { if (helpBtn.disabled) return; socket.emit('requestHelp'); });
+  function updateHelpButton() {
+    if (isBuzzer && helpRemaining.textContent !== '0次') { helpBtn.disabled = false; helpBtn.className = 'px-3 py-3 bg-purple-100 text-purple-700 rounded-lg btn-hover text-sm whitespace-nowrap'; }
+    else { helpBtn.disabled = true; helpBtn.className = 'px-3 py-3 bg-gray-100 text-gray-400 rounded-lg text-sm whitespace-nowrap'; }
+  }
+  socket.on('helpSent', data => { helpRemaining.textContent = '0次'; updateHelpButton(); buzzStatus.textContent = `已向观众 ${data.helperName} 求助，等待回复...`; addChatMessage({ name: '系统', message: `你已向观众 ${data.helperName} 发出场外求助`, isSystem: true }); });
+  socket.on('helpRejected', data => { buzzStatus.textContent = data.error || '求助失败'; });
+  socket.on('helpRequested', data => { helpResponseArea.classList.remove('hidden'); helpResponsePrompt.textContent = `${data.buzzerName} 向你求助！输入答案：`; helpResponseInput.value = ''; helpResponseInput.focus(); });
+  helpResponseSubmit.addEventListener('click', () => { const a = helpResponseInput.value.trim(); if (!a) return; socket.emit('submitHelp', a); helpResponseArea.classList.add('hidden'); });
+  helpResponseInput.addEventListener('keypress', e => { if (e.key === 'Enter' && helpResponseInput.value.trim()) helpResponseSubmit.click(); });
+  socket.on('helpDelivered', data => { addChatMessage({ name: '系统', message: `你已向 ${data.buzzerName} 发送提示`, isSystem: true }); });
+  socket.on('helpAnswer', data => { helpHint.classList.remove('hidden'); helpHintText.textContent = `观众 ${data.helperName}：${data.answer}`; });
+
+  // Referee judgment
+  socket.on('judgeRequest', data => {
+    judgeArea.classList.remove('hidden'); judgePrompt.textContent = `${data.buzzerName} 的答案：`;
+    judgeSubmittedAnswer.textContent = data.submittedAnswer || '(空)';
+    judgeReference.textContent = `参考答案：${data.referenceAnswer}`;
+    judgeTimer.textContent = data.timer || 15;
+  });
+  judgeCorrectBtn.addEventListener('click', () => { socket.emit('judgeAnswer', true); judgeArea.classList.add('hidden'); });
+  judgeWrongBtn.addEventListener('click', () => { socket.emit('judgeAnswer', false); judgeArea.classList.add('hidden'); });
+
+  socket.on('answerResult', data => {
+    currentBuzzerId = ''; canBuzz = false; isBuzzer = false; scores = data.scores;
+    answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden'); choiceOptions.classList.add('hidden');
+    judgeArea.classList.add('hidden'); resultArea.classList.remove('hidden');
+    if (data.correct) {
+      resultText.innerHTML = `<span class="text-green-600">${data.buzzerName} 回答正确！</span><br><span class="text-sm text-gray-500">答案: ${data.answer}</span>`;
+      resultText.className = 'text-lg font-medium text-green-600';
+    } else {
+      resultText.innerHTML = `<span class="text-red-600">${data.buzzerName} 回答错误！</span><br><span class="text-sm text-gray-500">正确答案: ${data.answer}</span>`;
+      resultText.className = 'text-lg font-medium text-red-600';
+    }
+    updateScoreList(scores, players); updateBuzzButton(); updateActionButtons();
+  });
+
+  socket.on('questionTimeout', data => {
+    currentBuzzerId = ''; canBuzz = false; isBuzzer = false;
+    answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden'); choiceOptions.classList.add('hidden');
+    judgeArea.classList.add('hidden'); resultArea.classList.remove('hidden');
+    resultText.innerHTML = `<span class="text-orange-600">时间到！无人抢答</span><br><span class="text-sm text-gray-500">正确答案: ${data.answer}</span>`;
+    resultText.className = 'text-lg font-medium text-orange-600';
+    updateScoreList(scores, players); updateBuzzButton(); updateActionButtons();
+  });
+
+  socket.on('gameEnd', data => {
+    gameInProgress = false; answerInline.classList.add('hidden'); buzzBtn.classList.remove('hidden');
+    choiceOptions.classList.add('hidden'); judgeArea.classList.add('hidden'); helpResponseArea.classList.add('hidden');
+    questionImageArea.classList.add('hidden'); showEndScreen();
+    currentBuzzerId = ''; canBuzz = false; isBuzzer = false;
+    rankingsContainer.innerHTML = '<h2 class="text-xl font-bold mb-3">排名</h2>';
+    data.rankings.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = `p-3 rounded-lg flex justify-between items-center ${i===0?'bg-yellow-50 border border-yellow-200':'bg-gray-50'}`;
+      div.innerHTML = `<div class="flex items-center"><span class="font-bold mr-2">${i+1}</span><span>${['','',''][i]||''} ${p.name}</span></div><span class="font-bold text-blue-600">${p.score} 分</span>`;
+      rankingsContainer.appendChild(div);
+    });
+    updateActionButtons();
+  });
+
+  socket.on('gameInProgress', data => {
+    myId = data.playerId || socket.id; gameInProgress = true;
+    isSpectator = data.isSpectator !== undefined ? data.isSpectator : true; isReferee = data.isReferee || false; isPlayer = !isSpectator && !isReferee;
+    showGame();
+    currentRound.textContent = data.currentRound || 1; totalRounds.textContent = data.totalRounds || 5; timer.textContent = data.currentTimer || 30;
+    currentBuzzerId = data.isBuzzer ? data.playerId : ''; canBuzz = !data.isBuzzer && isPlayer && !isSpectator && !isReferee; isBuzzer = !!data.isBuzzer;
+    updateScoreList(scores, players);
+    if (data.question) renderQuestionUI(data.question);
+    if (isReferee) { wordDisplay.textContent = `(裁判视角) 答案: ${data.question ? data.question.answer || '' : ''}`; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-orange-600'; chatInput.placeholder = '裁判消息...'; }
+    else if (isSpectator) { wordDisplay.textContent = '正在观战'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-gray-500'; chatInput.placeholder = '发送消息（仅观众可见）...'; }
+    else if (isBuzzer) {
+      wordDisplay.textContent = '请提交你的答案'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-green-600'; chatInput.placeholder = '输入消息...';
+      if (data.question && data.question.type === 'choice') { choiceOptions.classList.remove('hidden'); }
+      else { answerInline.classList.remove('hidden'); answerInlineInput.value = ''; answerInlineInput.focus(); helpHint.classList.add('hidden'); updateHelpButton(); }
+    } else { wordDisplay.textContent = '准备抢答'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-blue-600'; chatInput.placeholder = '输入消息...'; }
+    updateBuzzButton(); updateActionButtons();
+  });
+
+  socket.on('reconnectSuccess', data => {
+    myId = data.player.id; myName = data.player.name; isHost = data.isHost; isSpectator = data.isSpectator;
+    isReferee = data.isReferee || false; isPlayer = !isSpectator && !isReferee; isBuzzer = !!data.isBuzzer;
+    players = data.players; scores = data.scores; currentRoomId = data.roomId;
+    saveReconnectSession({ roomId: data.roomId, playerId: data.player.id, reconnectToken: data.reconnectToken });
+    if (data.gameState === 'waiting') showWaiting(data.roomId, '');
+    else if (data.gameState === 'finished') showEndScreen();
+    else {
+      gameInProgress = true; showGame(); currentBuzzerId = data.isBuzzer ? myId : '';
+      currentRound.textContent = data.currentRound || 1; totalRounds.textContent = data.totalRounds || 5; timer.textContent = data.currentTimer || 30;
+      canBuzz = !data.isBuzzer && isPlayer && !isSpectator && !isReferee;
+      updateScoreList(scores, players); updateActionButtons();
+      if (data.currentQuestion) renderQuestionUI(data.currentQuestion);
+      if (isReferee) { wordDisplay.textContent = `(裁判视角) 答案: ${data.currentQuestion ? data.currentQuestion.answer || '' : ''}`; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-orange-600'; chatInput.placeholder = '裁判消息...'; }
+      else if (isSpectator) { wordDisplay.textContent = '正在观战'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-gray-500'; chatInput.placeholder = '发送消息（仅观众可见）...'; }
+      else if (isBuzzer) {
+        wordDisplay.textContent = '请提交你的答案'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-green-600';
+        if (data.currentQuestion && data.currentQuestion.type === 'choice') { choiceOptions.classList.remove('hidden'); }
+        else { answerInline.classList.remove('hidden'); answerInlineInput.value = ''; answerInlineInput.focus(); helpHint.classList.add('hidden'); updateHelpButton(); }
+      } else { wordDisplay.textContent = '准备抢答'; wordDisplay.className = 'mt-3 text-xl font-medium text-center text-blue-600'; }
+      updateBuzzButton();
+      if (data.pendingJudgment && isReferee) { judgeArea.classList.remove('hidden'); judgePrompt.textContent = '等待你的判定...'; }
+    }
+  });
+  socket.on('reconnectFailed', () => clearReconnectSession());
+  socket.on('connect', () => { const s = loadReconnectSession(); if (s.roomId && s.playerId && s.reconnectToken) socket.emit('reconnectAttempt', s); });
+
+  forceEndTurnBtn.addEventListener('click', async () => { if (canModerateCurrentRoom() && await showConfirm('提前结束当前题', '确认提前结束当前题目？', { danger: true, confirmText: '结束题目' })) socket.emit('forceEndTurn'); });
+
+  function handleModerationClick(event) { const btn = event.target.closest('.moderation-btn'); if (!btn) return; event.preventDefault(); requestModeration(btn.dataset.action, btn.dataset.target); }
+  playerListWaiting.addEventListener('click', handleModerationClick); playerScores.addEventListener('click', handleModerationClick);
+
+  chatInput.addEventListener('keypress', e => { if (e.key === 'Enter' && chatInput.value.trim()) { socket.emit('chat', chatInput.value.trim()); chatInput.value = ''; } });
+  forceEndBtn.addEventListener('click', async () => { if (isHost && await showConfirm('强制结束游戏', '确认强制结束游戏？', { danger: true, confirmText: '结束游戏' })) socket.emit('forceEndGame'); });
+  playAgainBtn.addEventListener('click', () => { if (isHost) socket.emit('restartGame'); else showWaiting(currentRoomId, ''); });
+  switchToSpectatorBtn.addEventListener('click', () => socket.emit('switchToSpectator'));
+  leaveEndBtn.addEventListener('click', leaveCurrentRoom);
+
+  socket.on('scoreUpdate', sd => { scores = sd.scores || sd; updateScoreList(scores, players); });
+  socket.on('playerStateUpdate', data => { players = data.players || players; scores = data.scores || scores; isHost = data.hostId === myId; updateMyStateFromPlayers(players); if (!waitingScreen.classList.contains('hidden')) updatePlayerListWaiting({players, hostId: data.hostId}); if (!gameScreen.classList.contains('hidden')) updateScoreList(scores, players); updateActionButtons(); });
+  socket.on('moderationWarning', data => showNotice('你已被警告', data.message || '', { danger: true }));
+  socket.on('moderationKicked', async data => { await showNotice('你已被踢出房间', data.message || '', { danger: true }); clearReconnectSession(); currentRoomId = ''; gameInProgress = false; showLobby(); });
+  socket.on('moderationActionResult', data => { if (!data.ok) showNotice('操作失败', data.message || '', { danger: true }); });
+  socket.on('roomBroadcast', data => showNotice(data.actorName || '房间广播', data.message || ''));
+  socket.on('roomClosed', async data => { await showNotice('房间已关闭', data.message || '', { danger: true }); resetLocalRoomState(); showLobby(); });
+  socket.on('chat', addChatMessage);
+</script>
+</body>
+</html>
